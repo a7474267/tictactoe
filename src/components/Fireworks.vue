@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch, onUnmounted } from "vue";
+import { defineProps } from "vue";
 
 const props = defineProps({
   isActive: {
