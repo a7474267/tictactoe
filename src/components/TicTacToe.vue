@@ -1,52 +1,38 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from "vue";
+import { WORD_LIST } from "../constants/wordList";
 
-// 單字庫
-const WORD_LIST = [
-  "APPLE",
-  "BEACH",
-  "CLOUD",
-  "DREAM",
-  "EARTH",
-  "FLAME",
-  "GRAPE",
-  "HEART",
-  "IMAGE",
-  "JUICE",
-  "KNIFE",
-  "LIGHT",
-  "MUSIC",
-  "NIGHT",
-  "OCEAN",
-  "PEACE",
-  "QUEEN",
-  "RIVER",
-  "SMILE",
-  "TIGER",
-  "UNITY",
-  "VOICE",
-  "WATER",
-  "YOUTH",
-  "ZEBRA",
-];
+// 上次遊戲日期
+const lastPlayedDate = ref(localStorage.getItem("lastPlayedDate") || "");
+// 已使用的單字
+const usedWords = ref(JSON.parse(localStorage.getItem("usedWords") || "[]"));
 
-// 根據日期獲取題目
-const getDailyWord = () => {
-  const today = new Date();
-  const dateString = `${today.getFullYear()}-${
-    today.getMonth() + 1
-  }-${today.getDate()}`;
-  let total = 0;
-  for (let i = 0; i < dateString.length; i++) {
-    total += dateString.charCodeAt(i);
+// 獲取新的未使用單字
+const getNewWord = () => {
+  const availableWords = WORD_LIST.filter(
+    (word) => !usedWords.value.includes(word)
+  );
+  if (availableWords.length === 0) {
+    // 如果所有單字都用完了，重置已使用單字列表
+    usedWords.value = [];
+    localStorage.setItem("usedWords", "[]");
+    return WORD_LIST[Math.floor(Math.random() * WORD_LIST.length)];
   }
-  return WORD_LIST[total % WORD_LIST.length];
+  const newWord =
+    availableWords[Math.floor(Math.random() * availableWords.length)];
+  usedWords.value.push(newWord);
+  localStorage.setItem("usedWords", JSON.stringify(usedWords.value));
+  return newWord;
 };
 
 // 遊戲配置
 const WORD_LENGTH = 5;
 const MAX_ATTEMPTS = 6;
-const SOLUTION = computed(() => getDailyWord());
+const todayDate = ref(new Date().toDateString());
+const SOLUTION = computed(() => {
+  // 確保每次日期改變時都重新計算
+  return getNewWord();
+});
 
 // 初始化二維數組
 const initializeBoard = () => {
@@ -61,16 +47,14 @@ const currentAttempt = ref(0);
 const currentGuess = ref("");
 const gameStatus = ref("playing"); // playing, won, lost
 
-// 上次遊戲日期
-const lastPlayedDate = ref(localStorage.getItem("lastPlayedDate") || "");
-const todayDate = new Date().toDateString();
-
 // 檢查是否需要重置遊戲
 const checkAndResetGame = () => {
-  if (lastPlayedDate.value !== todayDate) {
+  const currentDate = new Date().toDateString();
+  if (lastPlayedDate.value !== currentDate) {
     resetGame();
-    localStorage.setItem("lastPlayedDate", todayDate);
-    lastPlayedDate.value = todayDate;
+    localStorage.setItem("lastPlayedDate", currentDate);
+    lastPlayedDate.value = currentDate;
+    todayDate.value = currentDate; // 更新當前日期，觸發 SOLUTION 重新計算
   }
 };
 
@@ -151,6 +135,20 @@ const getKeyStatus = (key) => {
   return status;
 };
 
+// 檢查單字是否在題庫中
+const isValidWord = (word) => {
+  return WORD_LIST.includes(word);
+};
+
+// 提示訊息
+const toast = ref("");
+const showToast = (message) => {
+  toast.value = message;
+  setTimeout(() => {
+    toast.value = "";
+  }, 2000);
+};
+
 // 處理鍵盤輸入
 const handleKeyInput = (key) => {
   if (gameStatus.value !== "playing") return;
@@ -160,6 +158,10 @@ const handleKeyInput = (key) => {
     currentGuess.value = currentGuess.value.slice(0, -1);
     updateCurrentRow(currentGuess.value);
   } else if (key === "Enter" && currentGuess.value.length === WORD_LENGTH) {
+    if (!isValidWord(currentGuess.value)) {
+      showToast("這個單字不在題庫中！");
+      return;
+    }
     submitGuess();
   } else if (
     key.length === 1 &&
@@ -180,19 +182,39 @@ const handleKeyDown = (event) => {
 onMounted(() => {
   window.addEventListener("keydown", handleKeyDown);
   checkAndResetGame();
-});
 
-onUnmounted(() => {
-  window.removeEventListener("keydown", handleKeyDown);
+  // 每分鐘檢查一次日期是否改變
+  const dateCheckInterval = setInterval(() => {
+    checkAndResetGame();
+  }, 60000);
+
+  onUnmounted(() => {
+    window.removeEventListener("keydown", handleKeyDown);
+    clearInterval(dateCheckInterval);
+  });
 });
 
 // 提交猜測
 const submitGuess = () => {
+  // 檢查單字是否有效
+  if (!isValidWord(currentGuess.value)) {
+    return;
+  }
+
   if (currentGuess.value === SOLUTION.value) {
     gameStatus.value = "won";
     startFireworks();
+    // 延遲一下再重置遊戲，讓玩家看到勝利的效果
+    setTimeout(() => {
+      resetGame();
+    }, 2000);
   } else if (currentAttempt.value === MAX_ATTEMPTS - 1) {
     gameStatus.value = "lost";
+    showToast(`正確答案是：${SOLUTION.value}`);
+    // 延遲一下再重置遊戲
+    setTimeout(() => {
+      resetGame();
+    }, 2000);
   }
 
   currentAttempt.value++;
@@ -207,6 +229,8 @@ const resetGame = () => {
   currentGuess.value = "";
   gameStatus.value = "playing";
   fireworks.value = [];
+  // 重新計算 SOLUTION
+  SOLUTION.value = getNewWord();
 };
 
 // 鍵盤配置
@@ -288,6 +312,10 @@ const keyboard = [
           }"
         ></div>
       </div>
+
+      <div v-if="toast" class="toast">
+        {{ toast }}
+      </div>
     </div>
   </div>
 </template>
@@ -301,14 +329,7 @@ const keyboard = [
   width: 100%;
   margin: 0;
   padding: 0;
-  background-color: #121213;
-}
-
-.container {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  overflow-y: auto;
 }
 
 .game-container {
@@ -321,6 +342,7 @@ const keyboard = [
   padding: 1rem;
   justify-content: center;
   gap: 1rem;
+  margin: 0 auto;
 }
 
 .game-content {
@@ -415,56 +437,50 @@ const keyboard = [
   width: 100%;
   max-width: 500px;
   padding: 0;
-  margin-bottom: 2rem;
 }
 
 .keyboard-row {
   display: flex;
-  justify-content: center;
-  gap: 6px;
   width: 100%;
+  gap: 6px;
+  justify-content: center;
 }
 
 .key {
-  width: 43px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex: 1;
   height: 58px;
   padding: 0;
-  font-size: 1.2rem;
-  font-weight: bold;
-  background-color: #818384;
-  color: #ffffff;
-  border: none;
   border-radius: 4px;
+  background: #818384;
+  color: #ffffff;
+  font-weight: bold;
   cursor: pointer;
-  transition: all 0.2s;
+  user-select: none;
   text-transform: uppercase;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  white-space: nowrap;
-  overflow: hidden;
+  border: none;
+}
+
+.key.wide-key {
+  flex: 1.5;
+}
+
+.key.correct {
+  background: #538d4e;
+}
+
+.key.present {
+  background: #b59f3b;
+}
+
+.key.absent {
+  background: #3a3a3c;
 }
 
 .key:hover {
   filter: brightness(1.1);
-}
-
-.key.correct {
-  background-color: #538d4e;
-}
-
-.key.present {
-  background-color: #b59f3b;
-}
-
-.key.absent {
-  background-color: #3a3a3c;
-}
-
-.wide-key {
-  width: 65px;
-  font-size: 0.9rem;
-  letter-spacing: -0.5px;
 }
 
 .reset-button {
@@ -476,7 +492,6 @@ const keyboard = [
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;
-  margin-top: 1rem;
 }
 
 .reset-button:hover {
@@ -564,6 +579,14 @@ const keyboard = [
   }
 }
 
+@media (min-width: 768px) {
+  .cell {
+    width: 62px;
+    height: 62px;
+    font-size: 2rem;
+  }
+}
+
 @media (max-width: 400px) {
   .cell {
     width: calc(18vw - 10px);
@@ -572,22 +595,39 @@ const keyboard = [
   }
 }
 
-@media (min-width: 768px) {
-  .cell {
-    width: 62px;
-    height: 62px;
-    font-size: 2rem;
-  }
-  .game-content {
-    padding-bottom: 5rem;
-  }
+.toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 24px;
+  background-color: rgba(51, 51, 51, 0.95);
+  color: #fff;
+  border-radius: 4px;
+  z-index: 1001;
+  font-size: 1rem;
+  font-weight: bold;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  animation: toast-in-out 2s ease-in-out;
+  pointer-events: none;
+}
 
-  .reset-button {
-    margin-top: 3rem;
+@keyframes toast-in-out {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 20px);
   }
-
-  .keyboard {
-    margin-bottom: 3rem;
+  10% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  90% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -20px);
   }
 }
 </style>

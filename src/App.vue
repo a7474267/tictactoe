@@ -22,8 +22,8 @@ import Wordle from "./components/TicTacToe.vue";
 .container {
   max-width: 800px;
   margin: 0 auto;
-  padding: 2rem;
   text-align: center;
+  width: 100%;
 }
 
 h1 {
