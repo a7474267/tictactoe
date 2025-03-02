@@ -1,19 +1,8 @@
 <script setup>
-import { defineProps } from "vue";
-
 const props = defineProps({
-  board: {
-    type: Array,
-    required: true,
-  },
-  currentAttempt: {
-    type: Number,
-    required: true,
-  },
-  getLetterStatus: {
-    type: Function,
-    required: true,
-  },
+  board: Array,
+  currentAttempt: Number,
+  getLetterStatus: Function,
 });
 </script>
 

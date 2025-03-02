@@ -1,15 +1,7 @@
 <script setup>
-import { defineProps, defineEmits } from "vue";
-
 const props = defineProps({
-  keyboard: {
-    type: Array,
-    required: true,
-  },
-  getKeyStatus: {
-    type: Function,
-    required: true,
-  },
+  keyboard: Array,
+  getKeyStatus: Function,
 });
 
 const emit = defineEmits(["keyInput"]);

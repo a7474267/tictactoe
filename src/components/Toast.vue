@@ -1,19 +1,8 @@
 <script setup>
-import { defineProps, defineEmits } from "vue";
-
 const props = defineProps({
-  message: {
-    type: String,
-    required: true,
-  },
-  isGameOver: {
-    type: Boolean,
-    default: false,
-  },
-  show: {
-    type: Boolean,
-    required: true,
-  },
+  show: Boolean,
+  message: String,
+  isGameOver: Boolean,
 });
 
 const emit = defineEmits(["restart"]);
