@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { WORD_LIST } from "../constants/wordList";
+import Fireworks from "./Fireworks.vue";
 
 // 上次遊戲日期
 const lastPlayedDate = ref(localStorage.getItem("lastPlayedDate") || "");
@@ -58,95 +59,19 @@ const checkAndResetGame = () => {
   }
 };
 
-// 煙火特效配置
-const fireworks = ref([]);
-const maxFireworks = 30;
-
-// 創建煙火
-const createFirework = () => {
-  if (fireworks.value.length >= maxFireworks) return;
-
-  const firework = {
-    id: Date.now() + Math.random(),
-    x: Math.random() * 100,
-    y: Math.random() * 40 + 30,
-    color: `hsl(${Math.random() * 360}, 80%, 60%)`,
-    tx: (Math.random() - 0.5) * 200,
-    ty: (Math.random() - 0.5) * 100 - 50,
-    rotate: Math.random() * 360,
-    distance: 40 + Math.random() * 40,
-    scale: 0.5 + Math.random() * 1,
-  };
-
-  fireworks.value.push(firework);
-  setTimeout(() => {
-    fireworks.value = fireworks.value.filter((f) => f.id !== firework.id);
-  }, 1500);
-};
-
-// 啟動煙火
-const startFireworks = () => {
-  if (gameStatus.value !== "won") return;
-
-  const interval = setInterval(() => {
-    if (gameStatus.value !== "won") {
-      clearInterval(interval);
-      fireworks.value = [];
-      return;
-    }
-    for (let i = 0; i < 3; i++) {
-      setTimeout(() => createFirework(), i * 50);
-    }
-  }, 200);
-};
-
-// 更新當前行
-const updateCurrentRow = (guess) => {
-  const row = [...Array(WORD_LENGTH).fill("")];
-  for (let i = 0; i < guess.length; i++) {
-    row[i] = guess[i];
-  }
-  board.value[currentAttempt.value] = row;
-};
-
-// 檢查字母狀態
-const getLetterStatus = (letter, position, attemptIndex) => {
-  if (attemptIndex > currentAttempt.value || !letter) return "";
-  if (attemptIndex === currentAttempt.value) return "";
-  if (letter === SOLUTION.value[position]) return "correct";
-  if (SOLUTION.value.includes(letter)) return "present";
-  return "absent";
-};
-
-// 獲取鍵盤按鈕狀態
-const getKeyStatus = (key) => {
-  let status = "";
-  for (let i = 0; i < currentAttempt.value; i++) {
-    const row = board.value[i];
-    for (let j = 0; j < row.length; j++) {
-      if (row[j] === key) {
-        const newStatus = getLetterStatus(key, j, i);
-        if (newStatus === "correct") return "correct";
-        if (newStatus === "present" && status !== "correct") status = "present";
-        if (newStatus === "absent" && !status) status = "absent";
-      }
-    }
-  }
-  return status;
-};
-
-// 檢查單字是否在題庫中
-const isValidWord = (word) => {
-  return WORD_LIST.includes(word);
-};
-
 // 提示訊息
 const toast = ref("");
-const showToast = (message) => {
+const isGameOverToast = ref(false);
+
+const showToast = (message, isGameOver = false) => {
   toast.value = message;
-  setTimeout(() => {
-    toast.value = "";
-  }, 2000);
+  isGameOverToast.value = isGameOver;
+  if (!isGameOver) {
+    setTimeout(() => {
+      toast.value = "";
+      isGameOverToast.value = false;
+    }, 2000);
+  }
 };
 
 // 處理鍵盤輸入
@@ -198,28 +123,27 @@ onMounted(() => {
 const submitGuess = () => {
   // 檢查單字是否有效
   if (!isValidWord(currentGuess.value)) {
+    showToast("這個單字不在題庫中！");
     return;
   }
 
   if (currentGuess.value === SOLUTION.value) {
     gameStatus.value = "won";
-    startFireworks();
     // 延遲一下再重置遊戲，讓玩家看到勝利的效果
     setTimeout(() => {
       resetGame();
     }, 2000);
   } else if (currentAttempt.value === MAX_ATTEMPTS - 1) {
     gameStatus.value = "lost";
-    showToast(`正確答案是：${SOLUTION.value}`);
-    // 延遲一下再重置遊戲
-    setTimeout(() => {
-      resetGame();
-    }, 2000);
+    showToast(`正確答案是：${SOLUTION.value}`, true);
   }
 
-  currentAttempt.value++;
-  currentGuess.value = "";
-  updateCurrentRow("");
+  // 只有在遊戲還在進行中時才增加嘗試次數並清空當前猜測
+  if (gameStatus.value === "playing") {
+    currentAttempt.value++;
+    currentGuess.value = "";
+    updateCurrentRow("");
+  }
 };
 
 // 重置遊戲
@@ -228,9 +152,86 @@ const resetGame = () => {
   currentAttempt.value = 0;
   currentGuess.value = "";
   gameStatus.value = "playing";
-  fireworks.value = [];
+  toast.value = "";
+  isGameOverToast.value = false;
   // 重新計算 SOLUTION
   SOLUTION.value = getNewWord();
+};
+
+// 更新當前行
+const updateCurrentRow = (guess) => {
+  const row = Array(WORD_LENGTH).fill("");
+  const guessLength = Math.min(guess.length, WORD_LENGTH);
+  for (let i = 0; i < guessLength; i++) {
+    row[i] = guess[i];
+  }
+  board.value[currentAttempt.value] = row;
+};
+
+// 檢查字母狀態
+const getLetterStatus = (letter, position, attemptIndex) => {
+  if (attemptIndex > currentAttempt.value || !letter) return "";
+  if (attemptIndex === currentAttempt.value) return "";
+
+  const guess = board.value[attemptIndex].join("");
+  const solution = SOLUTION.value;
+
+  // 如果字母在正確位置
+  if (letter === solution[position]) {
+    return "correct";
+  }
+
+  // 計算答案中剩餘的字母數量
+  const letterCount = {};
+  for (let i = 0; i < solution.length; i++) {
+    if (i !== position || solution[i] !== guess[i]) {
+      letterCount[solution[i]] = (letterCount[solution[i]] || 0) + 1;
+    }
+  }
+
+  // 檢查之前的位置是否已經使用了這個字母
+  for (let i = 0; i < position; i++) {
+    if (guess[i] === letter && guess[i] !== solution[i]) {
+      letterCount[letter] = (letterCount[letter] || 0) - 1;
+    }
+  }
+
+  // 如果字母在答案中且還有剩餘數量
+  if (letterCount[letter] > 0) {
+    return "present";
+  }
+
+  return "absent";
+};
+
+// 獲取鍵盤按鈕狀態
+const getKeyStatus = (key) => {
+  let finalStatus = "";
+
+  // 檢查所有已完成的嘗試
+  for (let i = 0; i < currentAttempt.value; i++) {
+    const row = board.value[i];
+    for (let j = 0; j < row.length; j++) {
+      if (row[j] === key) {
+        const status = getLetterStatus(key, j, i);
+        // 優先級：correct > present > absent
+        if (status === "correct") {
+          return "correct";
+        } else if (status === "present") {
+          finalStatus = "present";
+        } else if (status === "absent" && !finalStatus) {
+          finalStatus = "absent";
+        }
+      }
+    }
+  }
+
+  return finalStatus;
+};
+
+// 檢查單字是否在題庫中
+const isValidWord = (word) => {
+  return WORD_LIST.includes(word);
 };
 
 // 鍵盤配置
@@ -284,37 +285,19 @@ const keyboard = [
             </button>
           </div>
         </div>
+      </div>
 
+      <Fireworks :is-active="gameStatus === 'won'" />
+
+      <div v-if="toast" class="toast" :class="{ 'game-over': isGameOverToast }">
+        {{ toast }}
         <button
-          v-if="gameStatus !== 'playing'"
-          class="reset-button"
+          v-if="isGameOverToast"
+          class="restart-button"
           @click="resetGame"
         >
           重新開始
         </button>
-      </div>
-
-      <div v-if="gameStatus === 'won'" class="fireworks-container">
-        <div
-          v-for="firework in fireworks"
-          :key="firework.id"
-          class="firework"
-          :style="{
-            left: firework.x + '%',
-            top: firework.y + '%',
-            backgroundColor: firework.color,
-            color: firework.color,
-            '--tx': firework.tx + 'px',
-            '--ty': firework.ty + 'px',
-            '--rotate': firework.rotate + 'deg',
-            '--distance': firework.distance + 'px',
-            '--scale': firework.scale,
-          }"
-        ></div>
-      </div>
-
-      <div v-if="toast" class="toast">
-        {{ toast }}
       </div>
     </div>
   </div>
@@ -483,21 +466,6 @@ const keyboard = [
   filter: brightness(1.1);
 }
 
-.reset-button {
-  padding: 12px 24px;
-  font-size: 1.2rem;
-  background-color: #538d4e;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.reset-button:hover {
-  filter: brightness(1.1);
-}
-
 .fireworks-container {
   position: fixed;
   top: 0;
@@ -507,92 +475,6 @@ const keyboard = [
   pointer-events: none;
   z-index: 1000;
   overflow: hidden;
-}
-
-.firework {
-  position: absolute;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  animation: explode 1.5s ease-out forwards;
-  box-shadow: 0 0 10px 2px currentColor;
-  transform: scale(var(--scale));
-}
-
-@keyframes explode {
-  0% {
-    transform: scale(0) translate(0, 100vh);
-    opacity: 0;
-  }
-  5% {
-    opacity: 1;
-  }
-  30% {
-    transform: scale(var(--scale)) translate(var(--tx), var(--ty));
-    opacity: 1;
-  }
-  100% {
-    transform: scale(0) translate(var(--tx), var(--ty));
-    opacity: 0;
-  }
-}
-
-.firework::before,
-.firework::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  transform-origin: -50% -50%;
-  animation: sparkle 1.5s ease-out forwards;
-  box-shadow: 0 0 6px 1px currentColor;
-}
-
-.firework::before {
-  transform: rotate(45deg) translate(0, 0);
-  background: inherit;
-}
-
-.firework::after {
-  transform: rotate(-45deg) translate(0, 0);
-  background: inherit;
-}
-
-@keyframes sparkle {
-  0% {
-    transform: scale(0) rotate(0) translate(0, 0);
-    opacity: 0;
-  }
-  5% {
-    opacity: 1;
-  }
-  30% {
-    transform: scale(1) rotate(var(--rotate)) translate(var(--distance), 0);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(0) rotate(var(--rotate)) translate(var(--distance), 0);
-    opacity: 0;
-  }
-}
-
-@media (min-width: 768px) {
-  .cell {
-    width: 62px;
-    height: 62px;
-    font-size: 2rem;
-  }
-}
-
-@media (max-width: 400px) {
-  .cell {
-    width: calc(18vw - 10px);
-    height: calc(18vw - 10px);
-    font-size: 1.5rem;
-  }
 }
 
 .toast {
@@ -608,8 +490,36 @@ const keyboard = [
   font-size: 1rem;
   font-weight: bold;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  animation: toast-in-out 2s ease-in-out;
   pointer-events: none;
+}
+
+.toast:not(.game-over) {
+  animation: toast-in-out 2s ease-in-out;
+}
+
+.toast.game-over {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 32px;
+}
+
+.restart-button {
+  background-color: #538d4e;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: bold;
+  transition: background-color 0.2s;
+}
+
+.restart-button:hover {
+  background-color: #62a65c;
 }
 
 @keyframes toast-in-out {
