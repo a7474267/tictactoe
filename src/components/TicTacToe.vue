@@ -194,9 +194,6 @@ const submitGuess = () => {
   if (currentGuess.value === SOLUTION.value) {
     gameStatus.value = "won";
     showToast("恭喜您猜對了！", true);
-    setTimeout(() => {
-      resetGame();
-    }, 2000);
   } else if (currentAttempt.value === MAX_ATTEMPTS - 1) {
     gameStatus.value = "lost";
     showToast(`正確答案是：${SOLUTION.value}`, true);
