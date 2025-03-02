@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import { WORD_LIST } from "../constants/wordList";
 import Fireworks from "./Fireworks.vue";
 import Toast from "./Toast.vue";
@@ -258,10 +258,6 @@ const keyboard = [
   <div class="page-container">
     <div class="game-container">
       <div class="game-content">
-        <div class="game-header">
-          <button @click="resetGame" class="reset-button">重新開始</button>
-        </div>
-
         <GameBoard
           :board="board"
           :current-attempt="currentAttempt"
@@ -318,29 +314,6 @@ const keyboard = [
   align-items: center;
   gap: 1.5rem;
   width: 100%;
-}
-
-.game-header {
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  margin-bottom: 1rem;
-}
-
-.reset-button {
-  background-color: #538d4e;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 8px 16px;
-  font-size: 14px;
-  font-weight: bold;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.reset-button:hover {
-  background-color: #619b5c;
 }
 
 .daily-info {
